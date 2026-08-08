@@ -96,6 +96,9 @@ pub use solvers::coin_cbc::coin_cbc as default_solver;
 )))]
 #[cfg(feature = "cplex-rs")]
 pub use solvers::cplex::cplex as default_solver;
+#[cfg(feature = "gurobi")]
+#[cfg_attr(docsrs, doc(cfg(feature = "gurobi")))]
+pub use solvers::gurobi::gurobi;
 #[cfg(feature = "highs")]
 #[cfg_attr(docsrs, doc(cfg(feature = "highs")))]
 pub use solvers::highs::highs;
@@ -133,9 +136,10 @@ pub use solvers::scip::scip;
 pub use solvers::scip::scip as default_solver;
 
 pub use solvers::{
-    solver_name, DualValues, ModelWithSOS1, ObjectiveDirection, ResolutionError, Solution,
-    SolutionStatus, SolutionWithDual, Solver, SolverModel, StaticSolver, WithInitialSolution,
-    WithMipGap, WithTimeLimit,
+    solver_name, DualValues, InPlaceSolution, ModelWithMutableObjective, ModelWithMutableRhs,
+    ModelWithSOS1, ObjectiveDirection, ResolutionError, ReusableModel, Solution, SolutionStatus,
+    SolutionWithDual, Solver, SolverModel, StaticSolver, WithInitialSolution, WithMipGap,
+    WithTimeLimit,
 };
 pub use variable::{variable, ProblemVariables, Variable, VariableDefinition};
 

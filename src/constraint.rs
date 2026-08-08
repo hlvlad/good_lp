@@ -143,8 +143,12 @@ macro_rules! constraint {
     };
 }
 
-#[derive(Clone, PartialEq, Debug)]
-/// A constraint reference contains the sequence id of the constraint within the problem
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+/// A constraint reference contains the sequence id of the constraint within the problem.
+///
+/// It is a lightweight handle (a plain index), so it is `Copy` — it can be
+/// stored and reused freely, e.g. to update a constraint's right-hand side
+/// across several solves via [`crate::ModelWithMutableRhs`].
 pub struct ConstraintReference {
     pub(crate) index: usize,
 }

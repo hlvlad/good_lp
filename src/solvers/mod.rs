@@ -13,6 +13,10 @@ use crate::{constraint::ConstraintReference, IntoAffineExpression, Variable};
 #[cfg_attr(docsrs, doc(cfg(feature = "cplex-rs")))]
 pub mod cplex;
 
+#[cfg(feature = "gurobi")]
+#[cfg_attr(docsrs, doc(cfg(feature = "gurobi")))]
+pub mod gurobi;
+
 #[cfg(feature = "coin_cbc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "coin_cbc")))]
 pub mod coin_cbc;
@@ -239,6 +243,95 @@ pub trait WithInitialSolution {
 pub trait WithTimeLimit {
     /// Sets the time limit for the solver
     fn with_time_limit<T: Into<f64>>(self, seconds: T) -> Self;
+}
+
+/// A [`SolverModel`] that can be solved repeatedly **without being consumed**,
+/// so the same model can be modified between solves (see [`ModelWithMutableRhs`]
+/// and [`ModelWithMutableObjective`]) and warm-started by the backend.
+///
+/// This is the building block for algorithms that solve a sequence of closely
+/// related sub-problems — e.g. an ε-constraint sweep that only changes one
+/// right-hand side, or a weighted-sum sweep that only changes the objective —
+/// avoiding a full model rebuild per solve.
+///
+/// Only backends that keep a live, mutable model object implement this (CBC,
+/// HiGHS, SCIP, Gurobi, CPLEX); command-line backends do not.
+///
+/// The returned [`InPlaceSolution`] is an **owned snapshot** of the variable
+/// values, deliberately *not* a view into the model. It therefore cannot
+/// observe any later modification of the model, which rules out stale-read bugs
+/// where a held solution silently reflects a subsequent edit or re-solve.
+pub trait ReusableModel: SolverModel {
+    /// Solve the model in its current state, leaving it intact for further
+    /// edits and re-solves. Returns an owned snapshot of the solution.
+    ///
+    /// # Errors
+    /// Returns the backend error if the solve fails (e.g. infeasible/unbounded).
+    fn solve_mut(&mut self) -> Result<InPlaceSolution, Self::Error>;
+}
+
+/// An owned snapshot of a solve produced by [`ReusableModel::solve_mut`].
+///
+/// Implements [`Solution`]; unlike a borrowing solution it outlives further
+/// edits to the model it came from.
+#[derive(Clone, Debug)]
+pub struct InPlaceSolution {
+    values: HashMap<Variable, f64>,
+    status: SolutionStatus,
+}
+
+impl InPlaceSolution {
+    /// Build a snapshot from variable values and a status. Intended for use by
+    /// [`ReusableModel`] implementations.
+    #[must_use]
+    pub fn new(values: HashMap<Variable, f64>, status: SolutionStatus) -> Self {
+        Self { values, status }
+    }
+}
+
+impl Solution for InPlaceSolution {
+    fn status(&self) -> SolutionStatus {
+        self.status
+    }
+
+    /// # Panics
+    /// Panics if `variable` was not part of the solved model (the snapshot only
+    /// contains variables that existed at solve time).
+    fn value(&self, variable: Variable) -> f64 {
+        self.values[&variable]
+    }
+}
+
+/// A [`SolverModel`] whose constraint right-hand sides can be changed in place,
+/// keyed by the [`ConstraintReference`] returned from
+/// [`SolverModel::add_constraint`].
+///
+/// `rhs` is the **net right-hand side**: for a constraint entered as
+/// `linear_terms {<=,=} rhs` it is exactly that `rhs`. good_lp folds any
+/// constant on the variable side into this value, so for `a·x + k <= b` the net
+/// right-hand side is `b - k`. The ε-constraints used by ε-constraint /
+/// weighted-sum methods have no such constant, so `set_rhs(r, eps)` is exactly
+/// `linear_terms <= eps` — identical to rebuilding the constraint with that
+/// bound.
+///
+/// Constraint references are stable for the lifetime of the model because
+/// constraints are only ever appended (never removed or reordered).
+pub trait ModelWithMutableRhs: SolverModel {
+    /// Set the net right-hand side of a previously added constraint. The change
+    /// takes effect on the next solve.
+    fn set_rhs(&mut self, constraint: ConstraintReference, rhs: f64);
+}
+
+/// A [`SolverModel`] whose objective can be replaced in place.
+///
+/// The replacement is **complete**: any variable absent from `objective` has
+/// its objective coefficient reset to zero, so no term from a previously set
+/// objective can linger. This makes repeated `set_objective` calls safe for
+/// weighted-sum sweeps (e.g. Aneja–Nair) where the weights change each step.
+pub trait ModelWithMutableObjective: SolverModel {
+    /// Replace the objective and optimisation direction. Takes effect on the
+    /// next solve.
+    fn set_objective(&mut self, objective: crate::Expression, sense: ObjectiveDirection);
 }
 
 /// Information about the status of a solution, such as whether the solution is

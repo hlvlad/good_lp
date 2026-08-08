@@ -22,6 +22,10 @@ default = ["coin_cbc", "singlethread-cbc"]
 singlethread-cbc = ["coin_cbc?/singlethread-cbc"]
 scip = ["russcip"]
 scip_bundled = ["russcip?/bundled"]
+# Native Gurobi via the `grb` linked-library bindings (not gurobi_cl). The
+# `gurobi12` grb feature links libgurobiXXX.so; it is ABI-compatible with the
+# Gurobi 13 runtime (link the v13 .so via GUROBI_LIBNAME=gurobi130).
+gurobi = ["grb"]
 all_default_solvers = [
     "coin_cbc",
     "microlp",
@@ -44,6 +48,7 @@ highs = { version = "1.11.0", optional = true }
 russcip = { version = "0.8.2", optional = true }
 lp-solvers = { version = "1.0.0", features = ["cplex"], optional = true }
 cplex-rs = { version = "0.1", optional = true }
+grb = { version = "3.0.1", default-features = false, features = ["gurobi12"], optional = true }
 clarabel = { version = "0.11.0", optional = true, features = [] }
 fnv = "1.0.5"
 
